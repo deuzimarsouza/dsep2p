@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta
+      name="description"
+      content="Ponte envia fotos e documentos para outro dispositivo por um código temporário, com armazenamento no Railway por até 24 horas."
+    >
+    <meta name="theme-color" content="#18332b">
+    <meta name="application-name" content="Ponte">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Ponte">
+    <title>Ponte — arquivos daqui para lá</title>
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="./styles.css">
+    <script
+      src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"
+      integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU"
+      crossorigin="anonymous"
+      defer
+    ></script>
+    <script src="./config.js" defer></script>
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+    <div class="page-glow page-glow--one" aria-hidden="true"></div>
+    <div class="page-glow page-glow--two" aria-hidden="true"></div>
+
+    <header class="site-header shell">
+      <a class="brand" href="./" aria-label="Ponte — página inicial">
+        <span class="brand-mark" aria-hidden="true">
+          <span></span><i></i><span></span>
+        </span>
+        <span>Ponte</span>
+      </a>
+
+      <div class="header-actions">
+        <div class="connection-status" id="connectionStatus" role="status" data-state="loading">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="connectionStatusText">Verificando o Railway</span>
+        </div>
+        <button
+          class="menu-button"
+          id="menuButton"
+          type="button"
+          aria-label="Abrir menu"
+          aria-haspopup="dialog"
+          aria-controls="menuDialog"
+          aria-expanded="false"
+        >
+          <span class="hamburger-icon" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <main id="conteudo">
+      <div class="dashboard shell">
+        <section class="connect-card" aria-labelledby="shareTitle">
+          <div class="card-topline">
+            <div>
+              <p class="step-label">SUA PONTE</p>
+              <h1 id="shareTitle">Compartilhe o acesso</h1>
+            </div>
+            <span class="live-badge"><span aria-hidden="true"></span> temporária</span>
+          </div>
+
+          <div class="share-empty-panel" id="shareEmptyPanel">
+            <span class="share-empty-symbol" aria-hidden="true">↗</span>
+            <strong>Envie seus arquivos primeiro</strong>
+            <p>O código e o QR Code aparecerão aqui assim que o Railway concluir o envio.</p>
+          </div>
+
+          <div id="shareReadyPanel" hidden>
+            <p class="field-label">Código deste envio</p>
+            <div class="code-box" aria-live="polite">
+              <span id="ownCode">•••• ••••</span>
+            </div>
+
+            <div class="qr-panel">
+              <p class="qr-label">Escaneie no outro aparelho</p>
+              <div class="qr-code" id="qrCode" role="img" aria-label="QR Code do envio">
+                <span id="qrPlaceholder">Preparando QR Code…</span>
+              </div>
+              <p class="qr-help">A câmera abrirá esta página com o código e o servidor corretos.</p>
+            </div>
+
+            <div class="share-actions">
+              <button class="secondary-button compact-button" id="copyLinkButton" type="button">
+                Copiar link
+              </button>
+              <button class="text-button danger-text" id="deleteShareButton" type="button">
+                Apagar agora
+              </button>
+            </div>
+            <p class="expiry-copy" id="shareExpiry">Expira em até 24 horas.</p>
+          </div>
+
+          <div class="or-divider"><span>receber</span></div>
+
+          <form id="receiveForm" novalidate>
+            <label class="field-label" for="remoteCode">Digite o código recebido</label>
+            <div class="connect-row">
+              <input
+                id="remoteCode"
+                name="remoteCode"
+                type="text"
+                inputmode="text"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                maxlength="9"
+                placeholder="ABCD EFGH"
+                aria-describedby="codeHelp codeError"
+              >
+              <button class="primary-button" id="receiveButton" type="submit">
+                Buscar <span aria-hidden="true">→</span>
+              </button>
+            </div>
+            <p class="input-error" id="codeError" role="alert"></p>
+            <p class="field-help" id="codeHelp">O código tem oito caracteres e vale até o horário informado.</p>
+          </form>
+        </section>
+
+        <section class="upload-card" aria-labelledby="uploadTitle">
+          <div class="card-topline">
+            <div>
+              <p class="step-label">ENVIO</p>
+              <h2 id="uploadTitle">Enviar arquivos</h2>
+            </div>
+          </div>
+
+          <input
+            id="fileInput"
+            type="file"
+            multiple
+            accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/jpeg,image/png,application/pdf"
+            hidden
+          >
+          <button
+            class="drop-zone"
+            id="dropZone"
+            type="button"
+            aria-controls="fileInput"
+            aria-label="Escolher arquivos para enviar"
+            aria-describedby="fileFormats"
+          >
+            <span class="upload-symbol" aria-hidden="true"><span>↑</span></span>
+            <span class="drop-copy">
+              <span class="drop-title">Solte os arquivos aqui</span>
+              <span class="drop-subtitle">ou <span>escolha no seu dispositivo</span></span>
+            </span>
+            <span class="format-list" id="fileFormats">
+              JPG, PNG, PDF, Word, Excel e PowerPoint<br>até 25 MB por arquivo
+            </span>
+          </button>
+
+          <div class="selection-panel" id="selectionPanel" hidden>
+            <div class="selection-heading">
+              <div>
+                <strong id="selectionTitle">Arquivos selecionados</strong>
+                <span id="selectionSummary">0 arquivos</span>
+              </div>
+              <button class="clear-button" id="clearSelectionButton" type="button">Limpar</button>
+            </div>
+            <div class="selection-list" id="selectionList"></div>
+            <button class="primary-button upload-submit" id="uploadButton" type="button">
+              Enviar e gerar código
+            </button>
+          </div>
+
+          <div class="upload-progress-panel" id="uploadProgressPanel" hidden>
+            <div class="upload-progress-copy">
+              <strong id="uploadProgressTitle">Enviando ao Railway</strong>
+              <span id="uploadProgressPercent">0%</span>
+            </div>
+            <div class="progress-track" role="progressbar" aria-label="Progresso do envio" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="uploadProgressTrack">
+              <div class="progress-fill" id="uploadProgressFill"></div>
+            </div>
+            <button class="text-button danger-text" id="cancelUploadButton" type="button">Cancelar envio</button>
+          </div>
+
+          <div class="privacy-note">
+            <span class="privacy-lock" aria-hidden="true">•</span>
+            <p>
+              <strong>Armazenamento temporário.</strong> Os arquivos ficam no Railway por no máximo
+              24 horas e podem ser apagados antes por quem enviou.
+            </p>
+          </div>
+        </section>
+
+        <section class="transfer-card" aria-labelledby="downloadTitle">
+          <div class="transfer-header">
+            <div>
+              <p class="step-label">RECEBIMENTO</p>
+              <h2 id="downloadTitle">Arquivos disponíveis</h2>
+              <p id="downloadSummary">Digite um código para localizar os arquivos</p>
+            </div>
+            <button class="clear-button" id="clearDownloadButton" type="button" hidden>
+              Fechar ponte
+            </button>
+          </div>
+
+          <div class="transfer-empty" id="downloadEmpty">
+            <div class="empty-stack" aria-hidden="true"><span></span><span></span><span></span></div>
+            <p>Os arquivos do código informado<br>vão aparecer aqui.</p>
+          </div>
+
+          <div class="transfer-list" id="downloadList" hidden></div>
+          <p class="download-expiry" id="downloadExpiry" hidden></p>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site-footer shell">
+      <a class="brand brand--small" href="./">
+        <span class="brand-mark" aria-hidden="true"><span></span><i></i><span></span></span>
+        <span>Ponte</span>
+      </a>
+      <p>Feita para arquivos leves, daqui para lá.</p>
+      <button class="footer-link" id="privacyButton" type="button">Como funciona a privacidade?</button>
+    </footer>
+
+    <dialog class="menu-dialog" id="menuDialog" aria-labelledby="menuDialogTitle">
+      <form method="dialog">
+        <button class="dialog-close" type="submit" value="close" aria-label="Fechar menu">×</button>
+        <p class="step-label">NAVEGAÇÃO</p>
+        <h2 id="menuDialogTitle">Menu</h2>
+        <nav class="menu-dialog-links" aria-label="Menu principal">
+          <button class="menu-dialog-link" id="howButton" type="button">
+            <span>Como funciona?</span><span aria-hidden="true">→</span>
+          </button>
+          <button class="menu-dialog-link" id="aboutButton" type="button">
+            <span>Sobre</span><span aria-hidden="true">→</span>
+          </button>
+          <button class="menu-dialog-link" id="settingsButton" type="button">
+            <span>Configurar Railway</span><span aria-hidden="true">→</span>
+          </button>
+        </nav>
+      </form>
+    </dialog>
+
+    <dialog class="how-dialog" id="howDialog" aria-labelledby="howDialogTitle">
+      <form method="dialog">
+        <button class="dialog-close" type="submit" value="close" aria-label="Fechar">×</button>
+        <p class="step-label">SEM COMPLICAÇÃO</p>
+        <h2 id="howDialogTitle">Três passos. Uma ponte.</h2>
+        <ol class="dialog-steps">
+          <li>
+            <span>01</span>
+            <div><h3>Envie</h3><p>Escolha até 10 arquivos. Eles sobem para o servidor temporário do Railway.</p></div>
+          </li>
+          <li>
+            <span>02</span>
+            <div><h3>Compartilhe</h3><p>Mostre o QR Code, envie o link ou informe o código de oito caracteres.</p></div>
+          </li>
+          <li>
+            <span>03</span>
+            <div><h3>Baixe</h3><p>O outro aparelho confere o SHA‑256 e baixa. Tudo expira em até 24 horas.</p></div>
+          </li>
+        </ol>
+        <button class="primary-button dialog-full-button" type="submit" value="close">Entendi</button>
+      </form>
+    </dialog>
+
+    <dialog class="about-dialog" id="aboutDialog" aria-labelledby="aboutTitle" aria-describedby="aboutDescription">
+      <form method="dialog">
+        <button class="dialog-close" type="submit" value="close" aria-label="Fechar">×</button>
+        <p class="about-eyebrow"><span aria-hidden="true">↗</span> transferência temporária</p>
+        <h2 id="aboutTitle">O arquivo vai daqui.<br><span>E chega lá.</span></h2>
+        <p id="aboutDescription" class="about-description">
+          A página fica hospedada no GitHub Pages. O Railway recebe os arquivos,
+          cria um código temporário e entrega ao outro dispositivo.
+        </p>
+        <ul class="about-features">
+          <li><span aria-hidden="true">✓</span><strong>Até 10 arquivos por envio</strong></li>
+          <li><span aria-hidden="true">✓</span><strong>Hash SHA‑256 conferido no download</strong></li>
+          <li><span aria-hidden="true">✓</span><strong>Exclusão automática em até 24 horas</strong></li>
+        </ul>
+        <button class="primary-button dialog-full-button" type="submit" value="close">Entendi</button>
+      </form>
+    </dialog>
+
+    <dialog class="privacy-dialog" id="privacyDialog" aria-labelledby="privacyTitle" aria-describedby="privacyDescription privacyNetworkDescription">
+      <form method="dialog">
+        <button class="dialog-close" type="submit" value="close" aria-label="Fechar">×</button>
+        <div class="dialog-symbol dialog-symbol--lock" aria-hidden="true">•</div>
+        <p class="step-label">PRIVACIDADE</p>
+        <h2 id="privacyTitle">Temporário, não invisível.</h2>
+        <p id="privacyDescription">
+          O tráfego usa HTTPS, mas o arquivo passa pelo servidor e fica temporariamente no Volume do Railway.
+          O código funciona como a chave de acesso: envie somente para quem deve receber.
+        </p>
+        <p id="privacyNetworkDescription">
+          A aplicação não promete criptografia ponta a ponta nem substitui antivírus. Ao vencer o prazo —
+          no máximo 24 horas — a API remove os arquivos automaticamente.
+        </p>
+        <button class="primary-button dialog-full-button" type="submit" value="close">Entendi</button>
+      </form>
+    </dialog>
+
+    <dialog class="settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle" aria-describedby="settingsDescription">
+      <form id="apiConfigForm" novalidate>
+        <button class="dialog-close" id="settingsCloseButton" type="button" aria-label="Fechar">×</button>
+        <div class="dialog-symbol" aria-hidden="true">↗</div>
+        <p class="step-label">SERVIDOR</p>
+        <h2 id="settingsTitle">Conectar ao Railway</h2>
+        <p id="settingsDescription">
+          Informe o domínio público gerado no serviço da API. Esse endereço não é uma senha.
+        </p>
+        <label class="field-label" for="apiUrlInput">URL da API</label>
+        <input class="url-input" id="apiUrlInput" type="url" inputmode="url" autocomplete="url" placeholder="https://ponte-api.up.railway.app" aria-describedby="apiUrlHelp apiUrlError">
+        <p class="input-error" id="apiUrlError" role="alert"></p>
+        <p class="field-help" id="apiUrlHelp">Use HTTPS. Em testes locais, HTTP é aceito somente em localhost.</p>
+        <button class="primary-button dialog-full-button" id="saveApiButton" type="submit">Testar e salvar</button>
+      </form>
+    </dialog>
+
+    <aside class="install-suggestion" id="installSuggestion" aria-labelledby="installSuggestionTitle" aria-describedby="installSuggestionDescription" hidden>
+      <img src="./icons/icon-192.png" alt="" width="58" height="58" draggable="false">
+      <div class="install-suggestion-copy">
+        <strong id="installSuggestionTitle">Instale a Ponte</strong>
+        <p id="installSuggestionDescription">Use como aplicativo no celular ou computador, direto da tela inicial.</p>
+      </div>
+      <div class="install-suggestion-actions">
+        <button class="secondary-button" id="installDismissButton" type="button">Agora não</button>
+        <button class="primary-button" id="installButton" type="button">Instalar</button>
+      </div>
+    </aside>
+
+    <div class="toast-region" id="toastRegion"></div>
+    <div class="sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
+
+    <noscript><div class="noscript-message">A Ponte precisa do JavaScript ativado para funcionar.</div></noscript>
+  </body>
+</html>
