@@ -249,7 +249,7 @@
   };
 
   const state = {
-    apiBaseUrl: "",
+    apiBaseUrl: "https://dsep2p-production.up.railway.app",
     apiReady: false,
     apiProbePromise: null,
     limits: { ...DEFAULT_LIMITS },
