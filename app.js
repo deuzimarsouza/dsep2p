@@ -4,11 +4,11 @@
   const MB = 1024 * 1024;
   const DEFAULT_LIMITS = Object.freeze({
     ttlHours: 24,
-    maxFileSize: 25 * MB,
-    maxFileSizeMb: 25,
-    maxBatchSize: 100 * MB,
-    maxBatchSizeMb: 100,
-    dailyQuotaMb: 100,
+    maxFileSize: 250 * MB,
+    maxFileSizeMb: 250,
+    maxBatchSize: 1000 * MB,
+    maxBatchSizeMb: 1000,
+    dailyQuotaMb: 1000,
     maxFiles: 10,
   });
   const API_STORAGE_KEY = "ponte-api-base-url";
