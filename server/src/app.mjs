@@ -62,9 +62,9 @@ function booleanValue(value, fallback = false) {
 
 export function loadConfig(env = process.env) {
   const ttlHours = Math.min(24, positiveInteger(env.FILE_TTL_HOURS, 24));
-  const maxFileSizeMb = positiveInteger(env.MAX_FILE_SIZE_MB, 25);
-  const maxBatchSizeMb = positiveInteger(env.MAX_BATCH_SIZE_MB, 100);
-  const dailyQuotaMb = positiveInteger(env.DAILY_QUOTA_MB, 100);
+  const maxFileSizeMb = positiveInteger(env.MAX_FILE_SIZE_MB, 150);
+  const maxBatchSizeMb = positiveInteger(env.MAX_BATCH_SIZE_MB, 1000);
+  const dailyQuotaMb = positiveInteger(env.DAILY_QUOTA_MB, 1000);
   const storageDir = path.resolve(env.STORAGE_DIR || path.join(process.cwd(), "storage"));
   const frontendOrigins = String(
     env.FRONTEND_ORIGINS ||
