@@ -17,6 +17,7 @@
   const INSTALL_REMINDER_DELAY = 7 * 24 * 60 * 60 * 1000;
 
   const ALLOWED_EXTENSIONS = Object.freeze({
+    mp4: { family: "video", label: "MP4", mimes: ["video/mp4", "application;octet-stream"] },
     jpg: { family: "image", label: "JPG", mimes: ["image/jpeg", "application/octet-stream"] },
     jpeg: { family: "image", label: "JPEG", mimes: ["image/jpeg", "application/octet-stream"] },
     png: { family: "image", label: "PNG", mimes: ["image/png", "application/octet-stream"] },
