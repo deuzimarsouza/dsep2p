@@ -1,6 +1,6 @@
 # Ponte
 
-Sistema para enviar fotos e documentos de um dispositivo e baixar em outro usando:
+Sistema para enviar arquivos de qualquer formato de um dispositivo e baixar em outro usando:
 
 - **GitHub Pages** para a interface estática;
 - **Railway** para a API e o armazenamento temporário;
@@ -20,15 +20,15 @@ flowchart LR
 ## Recursos incluídos
 
 - até 10 arquivos por envio;
-- JPG, JPEG, PNG, PDF, Word, Excel e PowerPoint;
-- 25 MB por arquivo e 100 MB por envio, configuráveis;
-- cota padrão de 100 MB enviados por dia, também configurável;
+- qualquer formato de arquivo, inclusive arquivos sem extensão;
+- cada arquivo deve ter menos de 200 MB e o lote pode somar no máximo 200 MB;
+- cota padrão de 1.000 MB enviados por dia, configurável;
 - expiração automática em no máximo 24 horas;
 - exclusão imediata usando uma chave mantida somente no aparelho remetente;
 - progresso real de upload e download;
 - verificação SHA‑256 antes de iniciar o download;
 - QR Code e link que levam o código e o domínio correto da API ao receptor;
-- proteção CORS, Helmet, limitação de requisições e validação de extensão/MIME;
+- proteção CORS, Helmet, limitação de requisições e validação de tamanho no navegador e na API;
 - PWA instalável no celular e computador;
 - testes automáticos do frontend e da API.
 
@@ -78,9 +78,9 @@ Variáveis recomendadas:
 STORAGE_DIR=/data/ponte
 FRONTEND_ORIGINS=https://deuzimarsouza.github.io
 FILE_TTL_HOURS=24
-MAX_FILE_SIZE_MB=25
-MAX_BATCH_SIZE_MB=100
-DAILY_QUOTA_MB=100
+MAX_FILE_SIZE_MB=200
+MAX_BATCH_SIZE_MB=200
+DAILY_QUOTA_MB=1000
 MAX_FILES=10
 CLEANUP_INTERVAL_MINUTES=15
 DELETE_AFTER_DOWNLOAD=false
@@ -160,6 +160,8 @@ npm test
 ## Regras de armazenamento
 
 - A cota diária soma os bytes enviados e reinicia à meia-noite UTC.
+- O teto de produção é 200 MB: as variáveis de tamanho podem reduzi-lo, mas não aumentá-lo.
+- Um arquivo individual precisa ser estritamente menor que o limite; vários arquivos podem somar exatamente 200 MB.
 - Apagar uma ponte antes do prazo não devolve cota do mesmo dia.
 - O processo verifica itens expirados ao iniciar e a cada 15 minutos por padrão.
 - `FILE_TTL_HOURS` nunca ultrapassa 24 horas, mesmo se uma variável maior for informada.
@@ -170,4 +172,4 @@ npm test
 
 Esta versão não é P2P. O arquivo viaja por HTTPS e fica temporariamente no Railway. O código funciona como credencial de leitura: qualquer pessoa que tenha o código e o endereço da API pode baixar enquanto a ponte estiver ativa.
 
-Não há criptografia ponta a ponta implementada pela aplicação e não há antivírus. Para arquivos confidenciais, adicione criptografia no navegador antes do upload, autenticação e varredura de malware.
+Não há criptografia ponta a ponta implementada pela aplicação e não há antivírus. Como todos os formatos são aceitos, baixe apenas arquivos de remetentes confiáveis. Para arquivos confidenciais, adicione criptografia no navegador antes do upload, autenticação e varredura de malware.

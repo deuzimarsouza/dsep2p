@@ -2,12 +2,13 @@
   "use strict";
 
   const MB = 1024 * 1024;
+  const MAX_UPLOAD_SIZE = 200 * MB;
   const DEFAULT_LIMITS = Object.freeze({
     ttlHours: 24,
-    maxFileSize: 250 * MB,
-    maxFileSizeMb: 250,
-    maxBatchSize: 1000 * MB,
-    maxBatchSizeMb: 1000,
+    maxFileSize: MAX_UPLOAD_SIZE,
+    maxFileSizeMb: 200,
+    maxBatchSize: MAX_UPLOAD_SIZE,
+    maxBatchSizeMb: 200,
     dailyQuotaMb: 1000,
     maxFiles: 10,
   });
@@ -16,8 +17,8 @@
   const INSTALL_DISMISS_KEY = "ponte-install-dismissed-at";
   const INSTALL_REMINDER_DELAY = 7 * 24 * 60 * 60 * 1000;
 
-  const ALLOWED_EXTENSIONS = Object.freeze({
-    mp4: { family: "video", label: "MP4", mimes: ["video/mp4", "application;octet-stream"] },
+  const KNOWN_FILE_TYPES = Object.freeze({
+    mp4: { family: "video", label: "MP4", mimes: ["video/mp4", "application/octet-stream"] },
     jpg: { family: "image", label: "JPG", mimes: ["image/jpeg", "application/octet-stream"] },
     jpeg: { family: "image", label: "JPEG", mimes: ["image/jpeg", "application/octet-stream"] },
     png: { family: "image", label: "PNG", mimes: ["image/png", "application/octet-stream"] },
@@ -125,21 +126,84 @@
     return safe.slice(0, 180);
   }
 
+  function normalizeUploadLimits(config = {}) {
+    const configuredFileLimit = Number(config?.maxFileSize);
+    const configuredBatchLimit = Number(config?.maxBatchSize);
+    const maxFileSize = Number.isSafeInteger(configuredFileLimit) && configuredFileLimit > 0
+      ? Math.min(configuredFileLimit, MAX_UPLOAD_SIZE)
+      : DEFAULT_LIMITS.maxFileSize;
+    const maxBatchSize = Number.isSafeInteger(configuredBatchLimit) && configuredBatchLimit > 0
+      ? Math.min(configuredBatchLimit, MAX_UPLOAD_SIZE)
+      : DEFAULT_LIMITS.maxBatchSize;
+
+    return {
+      ...DEFAULT_LIMITS,
+      ...config,
+      maxFileSize,
+      maxFileSizeMb: maxFileSize / MB,
+      maxBatchSize,
+      maxBatchSizeMb: maxBatchSize / MB,
+    };
+  }
+
   function validateFileMeta(meta, limits = DEFAULT_LIMITS) {
     const name = sanitizeFilename(meta?.name);
     const extension = getExtension(name);
-    const definition = ALLOWED_EXTENSIONS[extension];
+    const definition = KNOWN_FILE_TYPES[extension] || {
+      family: "file",
+      label: extension ? extension.slice(0, 4).toUpperCase() : "ARQ",
+    };
     const size = Number(meta?.size);
     const mime = String(meta?.mime || meta?.type || "application/octet-stream")
       .toLowerCase()
       .split(";", 1)[0]
       .trim() || "application/octet-stream";
-    if (!definition) return { ok: false, reason: "TYPE_NOT_ALLOWED", name, extension, size };
-    if (!Number.isSafeInteger(size) || size < 0 || size > limits.maxFileSize) {
+    if (!Number.isSafeInteger(size) || size < 0 || size >= limits.maxFileSize) {
       return { ok: false, reason: "FILE_TOO_LARGE", name, extension, size };
     }
-    if (!definition.mimes.includes(mime)) return { ok: false, reason: "MIME_MISMATCH", name, extension, size };
     return { ok: true, name, extension, size, mime, ...definition };
+  }
+
+  function validateFileBatch(files, limits = DEFAULT_LIMITS) {
+    const candidates = Array.from(files || []);
+    if (candidates.length > limits.maxFiles) {
+      return { ok: false, reason: "TOO_MANY_FILES", count: candidates.length, totalSize: 0 };
+    }
+
+    let totalSize = 0;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const validation = validateFileMeta(candidates[index], limits);
+      if (!validation.ok) return { ...validation, index, totalSize };
+      totalSize += validation.size;
+      if (totalSize > limits.maxBatchSize) {
+        return { ok: false, reason: "BATCH_TOO_LARGE", name: validation.name, index, totalSize };
+      }
+    }
+
+    return { ok: true, count: candidates.length, totalSize };
+  }
+
+  function fileSelectionErrorMessage(validation, limits = DEFAULT_LIMITS) {
+    const messages = {
+      FILE_TOO_LARGE: `“${validation.name || "Este arquivo"}” não pode ser enviado: cada arquivo precisa ter menos de ${formatBytes(limits.maxFileSize)}.`,
+      BATCH_TOO_LARGE: `“${validation.name || "Este arquivo"}” não pode ser adicionado: o lote deve somar no máximo ${formatBytes(limits.maxBatchSize)}.`,
+      TOO_MANY_FILES: `Escolha no máximo ${limits.maxFiles} arquivos por envio.`,
+    };
+    return messages[validation.reason] || "Não foi possível aceitar este arquivo.";
+  }
+
+  function validateApiConfig(config) {
+    if (
+      !Number.isSafeInteger(config?.maxFileSize) || config.maxFileSize <= 0 ||
+      !Number.isSafeInteger(config?.maxBatchSize) || config.maxBatchSize <= 0 ||
+      !Number.isSafeInteger(config?.maxFiles) || config.maxFiles <= 0
+    ) {
+      throw new PonteError("A configuração retornada pela API é inválida.", "INVALID_API_CONFIG");
+    }
+    if (config.acceptsAnyFileType !== true) {
+      throw new PonteError("A API ainda não está configurada para aceitar qualquer formato de arquivo.", "UNIVERSAL_FILE_TYPES_REQUIRED");
+    }
+    return config;
   }
 
   function formatBytes(bytes) {
@@ -180,13 +244,17 @@
   }
 
   window.PonteUtils = Object.freeze({
-    ALLOWED_EXTENSIONS,
+    KNOWN_FILE_TYPES,
     DEFAULT_LIMITS,
     normalizeCode,
     displayCode,
     getExtension,
     sanitizeFilename,
+    normalizeUploadLimits,
     validateFileMeta,
+    validateFileBatch,
+    fileSelectionErrorMessage,
+    validateApiConfig,
     formatBytes,
     normalizeApiUrl,
     sha256Hex,
@@ -410,15 +478,12 @@
     const configResponse = await fetchWithTimeout(`${baseUrl}/api/config`, { cache: "no-store" });
     if (!configResponse.ok) throw await parseApiError(configResponse);
     const config = await configResponse.json();
-    if (!Number.isSafeInteger(config.maxFileSize) || !Array.isArray(config.allowedExtensions)) {
-      throw new PonteError("A configuração retornada pela API é inválida.", "INVALID_API_CONFIG");
-    }
-    return config;
+    return validateApiConfig(config);
   }
 
   function applyLimits(config) {
-    state.limits = { ...DEFAULT_LIMITS, ...config };
-    elements.fileFormats.textContent = `JPG, PNG, PDF, Word, Excel e PowerPoint — até ${state.limits.maxFileSizeMb} MB por arquivo; ${state.limits.maxBatchSizeMb} MB no total`;
+    state.limits = normalizeUploadLimits(config);
+    elements.fileFormats.textContent = `Qualquer formato de arquivo — cada arquivo com menos de ${formatBytes(state.limits.maxFileSize)}; lote de até ${formatBytes(state.limits.maxBatchSize)} no total`;
   }
 
   async function connectApi(baseUrl, { persist = true } = {}) {
@@ -481,7 +546,10 @@
 
   function fileDefinition(filename) {
     const extension = getExtension(filename);
-    return ALLOWED_EXTENSIONS[extension] || { family: "file", label: extension.toUpperCase() || "ARQ" };
+    return KNOWN_FILE_TYPES[extension] || {
+      family: "file",
+      label: extension ? extension.slice(0, 4).toUpperCase() : "ARQ",
+    };
   }
 
   function createFileIcon(filename) {
@@ -537,21 +605,20 @@
     for (const file of incoming) {
       if (existing.has(selectionKey(file))) continue;
       if (accepted.length >= state.limits.maxFiles) {
-        showToast(`Envie no máximo ${state.limits.maxFiles} arquivos por ponte.`, "error");
+        showToast(fileSelectionErrorMessage({ reason: "TOO_MANY_FILES" }, state.limits), "error");
         break;
       }
       const validation = validateFileMeta(file, state.limits);
       if (!validation.ok) {
-        const messages = {
-          TYPE_NOT_ALLOWED: `“${validation.name}” tem um formato não permitido.`,
-          FILE_TOO_LARGE: `“${validation.name}” ultrapassa ${state.limits.maxFileSizeMb} MB.`,
-          MIME_MISMATCH: `“${validation.name}” não combina com o tipo informado pelo navegador.`,
-        };
-        showToast(messages[validation.reason] || `Não foi possível aceitar “${validation.name}”.`, "error", 6500);
+        showToast(fileSelectionErrorMessage(validation, state.limits), "error", 6500);
         continue;
       }
       if (totalSize + file.size > state.limits.maxBatchSize) {
-        showToast(`O envio pode ter no máximo ${state.limits.maxBatchSizeMb} MB no total.`, "error", 6500);
+        showToast(fileSelectionErrorMessage({
+          reason: "BATCH_TOO_LARGE",
+          name: validation.name,
+          totalSize: totalSize + file.size,
+        }, state.limits), "error", 6500);
         continue;
       }
       accepted.push(file);
@@ -695,6 +762,12 @@
       await ensureApiReady();
     } catch (error) {
       showToast(error.message, "error");
+      return;
+    }
+
+    const selectionValidation = validateFileBatch(state.selectedFiles, state.limits);
+    if (!selectionValidation.ok) {
+      showToast(fileSelectionErrorMessage(selectionValidation, state.limits), "error", 6500);
       return;
     }
 

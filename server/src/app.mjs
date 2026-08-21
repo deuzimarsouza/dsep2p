@@ -11,44 +11,9 @@ import multer from "multer";
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_PATTERN = /^[A-HJ-NP-Z2-9]{8}$/;
 const MB = 1024 * 1024;
-
-export const ALLOWED_EXTENSIONS = Object.freeze({
-  jpg: ["image/jpeg", "application/octet-stream"],
-  jpeg: ["image/jpeg", "application/octet-stream"],
-  png: ["image/png", "application/octet-stream"],
-  pdf: ["application/pdf", "application/octet-stream"],
-  doc: ["application/msword", "application/doc", "application/vnd.ms-office", "application/octet-stream"],
-  docx: [
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/zip",
-    "application/octet-stream",
-  ],
-  xls: [
-    "application/vnd.ms-excel",
-    "application/xls",
-    "application/x-excel",
-    "application/vnd.ms-office",
-    "application/octet-stream",
-  ],
-  xlsx: [
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/zip",
-    "application/octet-stream",
-  ],
-  ppt: [
-    "application/vnd.ms-powerpoint",
-    "application/powerpoint",
-    "application/mspowerpoint",
-    "application/x-mspowerpoint",
-    "application/vnd.ms-office",
-    "application/octet-stream",
-  ],
-  pptx: [
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "application/zip",
-    "application/octet-stream",
-  ],
-});
+export const MAX_UPLOAD_SIZE_MB = 200;
+export const MAX_UPLOAD_SIZE = MAX_UPLOAD_SIZE_MB * MB;
+export const ALLOWED_EXTENSIONS = Object.freeze(["*"]);
 
 function positiveInteger(value, fallback, minimum = 1) {
   const parsed = Number.parseInt(value, 10);
@@ -62,8 +27,8 @@ function booleanValue(value, fallback = false) {
 
 export function loadConfig(env = process.env) {
   const ttlHours = Math.min(24, positiveInteger(env.FILE_TTL_HOURS, 24));
-  const maxFileSizeMb = positiveInteger(env.MAX_FILE_SIZE_MB, 150);
-  const maxBatchSizeMb = positiveInteger(env.MAX_BATCH_SIZE_MB, 1000);
+  const maxFileSizeMb = Math.min(MAX_UPLOAD_SIZE_MB, positiveInteger(env.MAX_FILE_SIZE_MB, MAX_UPLOAD_SIZE_MB));
+  const maxBatchSizeMb = Math.min(MAX_UPLOAD_SIZE_MB, positiveInteger(env.MAX_BATCH_SIZE_MB, MAX_UPLOAD_SIZE_MB));
   const dailyQuotaMb = positiveInteger(env.DAILY_QUOTA_MB, 1000);
   const storageDir = path.resolve(env.STORAGE_DIR || path.join(process.cwd(), "storage"));
   const frontendOrigins = String(
@@ -105,8 +70,10 @@ function normalizeConfig(overrides = {}) {
   config.incomingDir = path.resolve(overrides.incomingDir || path.join(config.storageDir, ".incoming"));
   config.usageFile = path.resolve(overrides.usageFile || path.join(config.storageDir, "usage.json"));
   config.ttlHours = config.ttlHours || Math.max(1, Math.ceil(config.shareTtlMs / 3_600_000));
-  config.maxFileSizeMb = config.maxFileSizeMb || Math.ceil(config.maxFileSize / MB);
-  config.maxBatchSizeMb = config.maxBatchSizeMb || Math.ceil(config.maxBatchSize / MB);
+  config.maxFileSize = Math.min(MAX_UPLOAD_SIZE, positiveInteger(config.maxFileSize, base.maxFileSize));
+  config.maxBatchSize = Math.min(MAX_UPLOAD_SIZE, positiveInteger(config.maxBatchSize, base.maxBatchSize));
+  config.maxFileSizeMb = config.maxFileSize / MB;
+  config.maxBatchSizeMb = config.maxBatchSize / MB;
   config.dailyQuotaMb = config.dailyQuotaMb || Math.ceil(config.dailyQuota / MB);
   return config;
 }
@@ -330,24 +297,17 @@ export function createApp(overrides = {}) {
     storage: multer.diskStorage({
       destination: config.incomingDir,
       filename: (_request, file, callback) => {
-        const extension = getExtension(file.originalname);
+        const extension = file.safeExtension ?? getExtension(sanitizeFilename(file.originalname));
         callback(null, `${crypto.randomUUID()}${extension ? `.${extension}` : ""}.upload`);
       },
     }),
+    // O Busboy/Multer emite LIMIT_FILE_SIZE ao atingir este valor, portanto um
+    // arquivo com exatamente o teto também é rejeitado e o contrato segue < teto.
     limits: { fileSize: config.maxFileSize, files: config.maxFiles, fields: 4 },
     fileFilter: (_request, file, callback) => {
       file.originalname = decodeMultipartFilename(file.originalname);
       const safeName = sanitizeFilename(file.originalname);
       const extension = getExtension(safeName);
-      const suppliedMime = String(file.mimetype || "application/octet-stream").toLowerCase().split(";", 1)[0].trim();
-      if (!ALLOWED_EXTENSIONS[extension]) {
-        callback(apiError(400, "TYPE_NOT_ALLOWED", `O formato .${extension || "desconhecido"} não é permitido.`));
-        return;
-      }
-      if (!ALLOWED_EXTENSIONS[extension].includes(suppliedMime)) {
-        callback(apiError(400, "MIME_MISMATCH", `O conteúdo informado para “${safeName}” não combina com a extensão.`));
-        return;
-      }
       file.safeName = safeName;
       file.safeExtension = extension;
       callback(null, true);
@@ -390,7 +350,8 @@ export function createApp(overrides = {}) {
       dailyQuotaMb: config.dailyQuotaMb,
       maxFiles: config.maxFiles,
       deleteAfterDownload: config.deleteAfterDownload,
-      allowedExtensions: Object.keys(ALLOWED_EXTENSIONS),
+      acceptsAnyFileType: true,
+      allowedExtensions: ALLOWED_EXTENSIONS,
     });
   });
 
@@ -398,6 +359,13 @@ export function createApp(overrides = {}) {
     const files = request.files || [];
     try {
       if (!files.length) throw apiError(400, "NO_FILES", "Selecione pelo menos um arquivo.");
+      if (files.some((file) => !Number.isSafeInteger(file.size) || file.size < 0 || file.size >= config.maxFileSize)) {
+        throw apiError(
+          413,
+          "FILE_TOO_LARGE",
+          `Cada arquivo deve ter menos de ${config.maxFileSizeMb} MB.`,
+        );
+      }
       const totalSize = files.reduce((sum, file) => sum + file.size, 0);
       if (totalSize > config.maxBatchSize) {
         throw apiError(
@@ -446,7 +414,7 @@ export function createApp(overrides = {}) {
 
         try {
           for (const file of preparedFiles) {
-            const storedName = `${file.id}.${file.extension}`;
+            const storedName = `${file.id}${file.extension ? `.${file.extension}` : ""}`;
             await rename(file.temporaryPath, path.join(directory, storedName));
             metadata.files.push({
               id: file.id,
@@ -527,7 +495,7 @@ export function createApp(overrides = {}) {
             return;
           }
           await writeJsonAtomic(metadataPath(config, metadata.code), current);
-        });
+        }).catch((error) => console.error("[ponte-api] falha ao atualizar metadados do download", error));
       });
     } catch (error) {
       next(error);
@@ -556,14 +524,16 @@ export function createApp(overrides = {}) {
     await cleanupFiles(request.files || []);
 
     if (error instanceof multer.MulterError) {
-      const tooLarge = error.code === "LIMIT_FILE_SIZE" || error.code === "LIMIT_FILE_COUNT";
+      const fileTooLarge = error.code === "LIMIT_FILE_SIZE";
+      const tooManyFiles = error.code === "LIMIT_FILE_COUNT";
+      const tooLarge = fileTooLarge || tooManyFiles;
       response.status(tooLarge ? 413 : 400).json({
         error: {
-          code: error.code,
+          code: fileTooLarge ? "FILE_TOO_LARGE" : error.code,
           message:
-            error.code === "LIMIT_FILE_SIZE"
-              ? `Cada arquivo pode ter no máximo ${config.maxFileSizeMb} MB.`
-              : error.code === "LIMIT_FILE_COUNT"
+            fileTooLarge
+              ? `Cada arquivo deve ter menos de ${config.maxFileSizeMb} MB.`
+              : tooManyFiles
                 ? `Envie no máximo ${config.maxFiles} arquivos por vez.`
                 : "O envio multipart é inválido.",
         },

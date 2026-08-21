@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import request from "supertest";
-import { createApp, getExtension, normalizeCode, sanitizeFilename } from "../src/app.mjs";
+import {
+  createApp,
+  getExtension,
+  loadConfig,
+  MAX_UPLOAD_SIZE,
+  MAX_UPLOAD_SIZE_MB,
+  normalizeCode,
+  sanitizeFilename,
+} from "../src/app.mjs";
 
 let temporaryDirectory;
 let app;
@@ -78,14 +86,33 @@ test("cria uma ponte, consulta, baixa com hash e apaga com token", async () => {
   await request(app).get(`/api/shares/${created.body.code}`).expect(404);
 });
 
-test("rejeita formato não permitido, origem desconhecida e cota excedida", async () => {
-  await request(app)
+test("aceita formatos arbitrários, MIME divergente e arquivo sem extensão", async () => {
+  const created = await request(app)
     .post("/api/shares")
     .set("Origin", "https://deuzimarsouza.github.io")
     .attach("files", Buffer.from("MZ"), { filename: "programa.exe", contentType: "application/octet-stream" })
-    .expect(400)
-    .expect(({ body }) => assert.equal(body.error.code, "TYPE_NOT_ALLOWED"));
+    .attach("files", Buffer.from("json"), { filename: "imagem.jpg", contentType: "application/json" })
+    .attach("files", Buffer.from("sem extensão"), { filename: "LEIA-ME", contentType: "application/x-custom" })
+    .expect(201);
 
+  assert.deepEqual(
+    created.body.files.map((file) => file.name),
+    ["programa.exe", "imagem.jpg", "LEIA-ME"],
+  );
+
+  const metadata = JSON.parse(
+    await readFile(path.join(temporaryDirectory, "shares", created.body.code, "metadata.json"), "utf8"),
+  );
+  const extensionlessFile = metadata.files.find((file) => file.name === "LEIA-ME");
+  assert.ok(extensionlessFile);
+  assert.equal(extensionlessFile.storedName.endsWith("."), false);
+
+  const config = await request(app).get("/api/config").expect(200);
+  assert.equal(config.body.acceptsAnyFileType, true);
+  assert.deepEqual(config.body.allowedExtensions, ["*"]);
+});
+
+test("rejeita origem desconhecida e cota excedida", async () => {
   await request(app)
     .get("/api/config")
     .set("Origin", "https://site-invalido.example")
@@ -112,6 +139,68 @@ test("rejeita formato não permitido, origem desconhecida e cota excedida", asyn
     .attach("files", Buffer.from("cinco"), { filename: "a.pdf", contentType: "application/pdf" })
     .expect(429)
     .expect(({ body }) => assert.equal(body.error.code, "DAILY_QUOTA_EXCEEDED"));
+});
+
+test("aplica limite individual estrito e limite agregado inclusivo", async () => {
+  const limitsDirectory = path.join(temporaryDirectory, "limits");
+  const limitsApp = createApp({
+    storageDir: limitsDirectory,
+    frontendOrigins: ["*"],
+    maxFileSize: 10,
+    maxBatchSize: 10,
+    dailyQuota: 100,
+    maxFiles: 3,
+    disableRateLimit: true,
+    trustProxy: 0,
+  });
+
+  await request(limitsApp)
+    .post("/api/shares")
+    .attach("files", Buffer.alloc(10), { filename: "exatamente.bin" })
+    .expect(413)
+    .expect(({ body }) => assert.equal(body.error.code, "FILE_TOO_LARGE"));
+
+  await request(limitsApp)
+    .post("/api/shares")
+    .attach("files", Buffer.alloc(11), { filename: "maior.bin" })
+    .expect(413)
+    .expect(({ body }) => assert.equal(body.error.code, "FILE_TOO_LARGE"));
+
+  await request(limitsApp)
+    .post("/api/shares")
+    .attach("files", Buffer.alloc(9), { filename: "menor.bin" })
+    .expect(201);
+
+  await request(limitsApp)
+    .post("/api/shares")
+    .attach("files", Buffer.alloc(5), { filename: "a.bin" })
+    .attach("files", Buffer.alloc(5), { filename: "b.bin" })
+    .expect(201);
+
+  await request(limitsApp)
+    .post("/api/shares")
+    .attach("files", Buffer.alloc(6), { filename: "a.bin" })
+    .attach("files", Buffer.alloc(5), { filename: "b.bin" })
+    .expect(413)
+    .expect(({ body }) => assert.equal(body.error.code, "BATCH_TOO_LARGE"));
+
+  assert.deepEqual(await readdir(path.join(limitsDirectory, ".incoming")), []);
+});
+
+test("mantém o teto do servidor em 200 MiB e permite apenas reduzi-lo por ambiente", () => {
+  const defaults = loadConfig({});
+  assert.equal(defaults.maxFileSize, MAX_UPLOAD_SIZE);
+  assert.equal(defaults.maxBatchSize, MAX_UPLOAD_SIZE);
+  assert.equal(defaults.maxFileSizeMb, MAX_UPLOAD_SIZE_MB);
+  assert.equal(defaults.maxBatchSizeMb, MAX_UPLOAD_SIZE_MB);
+
+  const clamped = loadConfig({ MAX_FILE_SIZE_MB: "500", MAX_BATCH_SIZE_MB: "900" });
+  assert.equal(clamped.maxFileSize, MAX_UPLOAD_SIZE);
+  assert.equal(clamped.maxBatchSize, MAX_UPLOAD_SIZE);
+
+  const reduced = loadConfig({ MAX_FILE_SIZE_MB: "25", MAX_BATCH_SIZE_MB: "100" });
+  assert.equal(reduced.maxFileSize, 25 * 1024 * 1024);
+  assert.equal(reduced.maxBatchSize, 100 * 1024 * 1024);
 });
 
 test("bloqueia e remove uma ponte assim que o prazo vence", async () => {

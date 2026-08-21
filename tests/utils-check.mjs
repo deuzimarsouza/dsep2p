@@ -61,6 +61,7 @@ const sandbox = {
 vm.runInNewContext(source, sandbox, { filename: "app.js" });
 const utils = windowStub.PonteUtils;
 assert(utils, "As funções de validação precisam ser expostas para teste.");
+const MB = 1024 * 1024;
 
 assert.equal(utils.normalizeCode("abci 0123-xyz9"), "ABC23XYZ");
 assert.equal(utils.displayCode("ABCDEFGH"), "ABCD EFGH");
@@ -72,17 +73,18 @@ const sanitizedLongName = utils.sanitizeFilename(longName);
 assert.equal(sanitizedLongName.length, 180);
 assert(sanitizedLongName.endsWith(".pdf"), "Nomes longos precisam preservar a extensão.");
 
+assert.equal(utils.DEFAULT_LIMITS.maxFileSize, 200 * MB);
+assert.equal(utils.DEFAULT_LIMITS.maxBatchSize, 200 * MB);
+assert.equal(utils.validateFileMeta({ name: "foto.JPG", size: 200 * MB - 1, type: "image/jpeg" }).ok, true);
 assert.equal(
-  utils.validateFileMeta({ name: "foto.JPG", size: 25 * 1024 * 1024, type: "image/jpeg" }).ok,
-  true,
-);
-assert.equal(
-  utils.validateFileMeta({ name: "foto.jpg", size: 25 * 1024 * 1024 + 1, type: "image/jpeg" }).reason,
+  utils.validateFileMeta({ name: "foto.jpg", size: 200 * MB, type: "image/jpeg" }).reason,
   "FILE_TOO_LARGE",
+  "Um arquivo individual de exatamente 200 MiB deve ser rejeitado.",
 );
 assert.equal(
-  utils.validateFileMeta({ name: "foto.jpg", size: 10, type: "text/html" }).reason,
-  "MIME_MISMATCH",
+  utils.validateFileMeta({ name: "foto.jpg", size: 10, type: "text/html" }).ok,
+  true,
+  "O MIME informado pelo navegador não deve restringir o formato.",
 );
 assert.equal(utils.validateFileMeta({ name: "planilha.xlsx", size: 10, type: "" }).ok, true);
 assert.equal(
@@ -95,7 +97,64 @@ assert.equal(
   true,
   "A ação file-offer não pode ser confundida com o MIME do arquivo.",
 );
-assert.equal(utils.validateFileMeta({ name: "programa.exe", size: 10, type: "" }).reason, "TYPE_NOT_ALLOWED");
+assert.equal(
+  utils.validateFileMeta({ name: "programa.exe", size: 10, type: "application/x-msdownload" }).ok,
+  true,
+  "Extensões fora da lista de ícones também devem ser aceitas.",
+);
+assert.equal(
+  utils.validateFileMeta({ name: "LEIA-ME", size: 10, type: "application/x-custom" }).ok,
+  true,
+  "Arquivos sem extensão também devem ser aceitos.",
+);
+
+const exactBatch = utils.validateFileBatch([
+  { name: "parte-a.bin", size: 100 * MB, type: "application/octet-stream" },
+  { name: "parte-b.dat", size: 100 * MB, type: "application/x-custom" },
+]);
+assert.equal(exactBatch.ok, true, "Um lote de vários arquivos pode somar exatamente 200 MiB.");
+assert.equal(exactBatch.totalSize, 200 * MB);
+
+const oversizedBatch = utils.validateFileBatch([
+  { name: "parte-a.bin", size: 100 * MB, type: "application/octet-stream" },
+  { name: "parte-b.dat", size: 100 * MB + 1, type: "application/x-custom" },
+]);
+assert.equal(oversizedBatch.ok, false);
+assert.equal(oversizedBatch.reason, "BATCH_TOO_LARGE", "Um lote acima de 200 MiB deve ser rejeitado.");
+
+assert.match(
+  utils.fileSelectionErrorMessage({ reason: "FILE_TOO_LARGE", name: "grande.bin" }),
+  /menos de 200 MB/,
+);
+assert.match(
+  utils.fileSelectionErrorMessage({ reason: "BATCH_TOO_LARGE", name: "parte-b.dat" }),
+  /no máximo 200 MB/,
+);
+
+const cappedLimits = utils.normalizeUploadLimits({ maxFileSize: 500 * MB, maxBatchSize: 500 * MB });
+assert.equal(cappedLimits.maxFileSize, 200 * MB, "A API não pode elevar o teto individual do frontend.");
+assert.equal(cappedLimits.maxBatchSize, 200 * MB, "A API não pode elevar o teto do lote no frontend.");
+const lowerLimits = utils.normalizeUploadLimits({ maxFileSize: 50 * MB, maxBatchSize: 80 * MB });
+assert.equal(lowerLimits.maxFileSize, 50 * MB, "O frontend deve respeitar um limite menor informado pela API.");
+assert.equal(lowerLimits.maxBatchSize, 80 * MB, "O frontend deve respeitar um lote menor informado pela API.");
+
+const universalConfig = {
+  maxFileSize: 200 * MB,
+  maxBatchSize: 200 * MB,
+  maxFiles: 10,
+  acceptsAnyFileType: true,
+};
+assert.equal(utils.validateApiConfig(universalConfig), universalConfig);
+assert.throws(
+  () => utils.validateApiConfig({ ...universalConfig, acceptsAnyFileType: false }),
+  /qualquer formato/,
+  "O frontend deve recusar uma API que ainda filtre formatos.",
+);
+assert.throws(
+  () => utils.validateApiConfig({ ...universalConfig, maxBatchSize: 0 }),
+  /inválida/,
+  "Limites numéricos inválidos não podem ser aplicados.",
+);
 assert.equal(utils.formatBytes(1024), "1,0 KB");
 assert.equal(utils.normalizeApiUrl("https://ponte-api.up.railway.app/"), "https://ponte-api.up.railway.app");
 assert.equal(utils.normalizeApiUrl("http://localhost:3000"), "http://localhost:3000");

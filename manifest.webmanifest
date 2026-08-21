@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Ponte — arquivos daqui para lá",
   "short_name": "Ponte",
-  "description": "Envie fotos e documentos por um código temporário com armazenamento no Railway.",
+  "description": "Envie arquivos de qualquer formato por um código temporário com armazenamento no Railway.",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta
       name="description"
-      content="Ponte envia fotos e documentos para outro dispositivo por um código temporário, com armazenamento no Railway por até 24 horas."
+      content="Ponte envia arquivos de qualquer formato para outro dispositivo por um código temporário, com armazenamento no Railway por até 24 horas."
     >
     <meta name="theme-color" content="#18332b">
     <meta name="application-name" content="Ponte">
@@ -142,7 +142,6 @@
             id="fileInput"
             type="file"
             multiple
-            accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/jpeg,image/png,application/pdf"
             hidden
           >
           <button
@@ -159,7 +158,7 @@
               <span class="drop-subtitle">ou <span>escolha no seu dispositivo</span></span>
             </span>
             <span class="format-list" id="fileFormats">
-              JPG, PNG, PDF, Word, Excel e PowerPoint<br>até 25 MB por arquivo
+              Qualquer formato de arquivo<br>cada arquivo com menos de 200 MB; lote de até 200 MB
             </span>
           </button>
 
@@ -225,7 +224,7 @@
         <span class="brand-mark" aria-hidden="true"><span></span><i></i><span></span></span>
         <span>Ponte</span>
       </a>
-      <p>Feita para arquivos leves, daqui para lá.</p>
+      <p>Feita para levar seus arquivos daqui para lá.</p>
       <button class="footer-link" id="privacyButton" type="button">Como funciona a privacidade?</button>
     </footer>
 
@@ -256,7 +255,7 @@
         <ol class="dialog-steps">
           <li>
             <span>01</span>
-            <div><h3>Envie</h3><p>Escolha até 10 arquivos. Eles sobem para o servidor temporário do Railway.</p></div>
+            <div><h3>Envie</h3><p>Escolha até 10 arquivos de qualquer formato, somando no máximo 200 MB. Eles sobem para o servidor temporário do Railway.</p></div>
           </li>
           <li>
             <span>02</span>
@@ -281,7 +280,7 @@
           cria um código temporário e entrega ao outro dispositivo.
         </p>
         <ul class="about-features">
-          <li><span aria-hidden="true">✓</span><strong>Até 10 arquivos por envio</strong></li>
+          <li><span aria-hidden="true">✓</span><strong>Qualquer formato, até 200 MB por envio</strong></li>
           <li><span aria-hidden="true">✓</span><strong>Hash SHA‑256 conferido no download</strong></li>
           <li><span aria-hidden="true">✓</span><strong>Exclusão automática em até 24 horas</strong></li>
         </ul>
