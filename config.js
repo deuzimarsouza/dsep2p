@@ -1,5 +1,4 @@
 window.PONTE_CONFIG = Object.freeze({
-  // O workflow do GitHub Pages substitui este valor pela variável PONTE_API_URL.
-  // Também é possível configurar o endereço pelo menu da própria página.
-  apiBaseUrl: "",
+  // Endpoint público padrão. O workflow permite substituí-lo pela variável PONTE_API_URL.
+  apiBaseUrl: "https://dsep2p-production.up.railway.app",
 });
