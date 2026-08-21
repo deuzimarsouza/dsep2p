@@ -16,6 +16,7 @@
   const LAST_SHARE_KEY = "ponte-last-created-share";
   const INSTALL_DISMISS_KEY = "ponte-install-dismissed-at";
   const INSTALL_REMINDER_DELAY = 7 * 24 * 60 * 60 * 1000;
+  const DEFAULT_API_BASE_URL = "https://dsep2p-production.up.railway.app";
 
   const KNOWN_FILE_TYPES = Object.freeze({
     mp4: { family: "video", label: "MP4", mimes: ["video/mp4", "application/octet-stream"] },
@@ -238,6 +239,18 @@
     return url.origin;
   }
 
+  function resolveApiBaseUrl(candidates = []) {
+    for (const candidate of [...candidates, DEFAULT_API_BASE_URL]) {
+      try {
+        const normalized = normalizeApiUrl(candidate);
+        if (normalized) return normalized;
+      } catch {
+        // Ignora uma fonte inválida e tenta a próxima opção segura.
+      }
+    }
+    return "";
+  }
+
   async function sha256Hex(buffer) {
     const digest = await crypto.subtle.digest("SHA-256", buffer);
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -246,6 +259,7 @@
   window.PonteUtils = Object.freeze({
     KNOWN_FILE_TYPES,
     DEFAULT_LIMITS,
+    DEFAULT_API_BASE_URL,
     normalizeCode,
     displayCode,
     getExtension,
@@ -257,6 +271,7 @@
     validateApiConfig,
     formatBytes,
     normalizeApiUrl,
+    resolveApiBaseUrl,
     sha256Hex,
   });
 
@@ -318,7 +333,7 @@
   };
 
   const state = {
-    apiBaseUrl: "https://dsep2p-production.up.railway.app",
+    apiBaseUrl: "",
     apiReady: false,
     apiProbePromise: null,
     limits: { ...DEFAULT_LIMITS },
@@ -508,20 +523,11 @@
 
   function resolveInitialApiUrl() {
     const pageUrl = new URL(window.location.href);
-    const candidates = [
+    return resolveApiBaseUrl([
       pageUrl.searchParams.get("api"),
-      storageGet(API_STORAGE_KEY),
       window.PONTE_CONFIG?.apiBaseUrl,
-    ];
-    for (const candidate of candidates) {
-      try {
-        const normalized = normalizeApiUrl(candidate);
-        if (normalized) return normalized;
-      } catch {
-        // Tenta a próxima fonte de configuração.
-      }
-    }
-    return "";
+      storageGet(API_STORAGE_KEY),
+    ]);
   }
 
   async function ensureApiReady() {
@@ -1120,9 +1126,12 @@
   function registerServiceWorker() {
     if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {
-        showToast("O modo instalável não pôde ser preparado.", "info");
-      });
+      navigator.serviceWorker
+        .register("./sw.js", { scope: "./", updateViaCache: "none" })
+        .then((registration) => registration.update())
+        .catch(() => {
+          showToast("O modo instalável não pôde ser preparado.", "info");
+        });
     });
   }
 
@@ -1186,7 +1195,7 @@
     });
     elements.howButton.addEventListener("click", () => openDialog(elements.howDialog));
     elements.aboutButton.addEventListener("click", () => openDialog(elements.aboutDialog));
-    elements.settingsButton.addEventListener("click", () => {
+    elements.settingsButton?.addEventListener("click", () => {
       elements.apiUrlInput.value = state.apiBaseUrl;
       setApiError();
       openDialog(elements.settingsDialog);
