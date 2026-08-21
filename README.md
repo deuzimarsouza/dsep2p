@@ -21,7 +21,7 @@ flowchart LR
 
 - até 10 arquivos por envio;
 - qualquer formato de arquivo, inclusive arquivos sem extensão;
-- cada arquivo deve ter menos de 200 MB e o lote pode somar no máximo 200 MB;
+- cada arquivo pode ter até 200 MB e o lote pode somar no máximo 200 MB;
 - cota padrão de 1.000 MB enviados por dia, configurável;
 - expiração automática em no máximo 24 horas;
 - exclusão imediata usando uma chave mantida somente no aparelho remetente;
@@ -161,7 +161,7 @@ npm test
 
 - A cota diária soma os bytes enviados e reinicia à meia-noite UTC.
 - O teto de produção é 200 MB: as variáveis de tamanho podem reduzi-lo, mas não aumentá-lo.
-- Um arquivo individual precisa ser estritamente menor que o limite; vários arquivos podem somar exatamente 200 MB.
+- Um arquivo individual ou um lote com vários arquivos pode somar exatamente 200 MB; qualquer byte acima do limite é rejeitado.
 - Apagar uma ponte antes do prazo não devolve cota do mesmo dia.
 - O processo verifica itens expirados ao iniciar e a cada 15 minutos por padrão.
 - `FILE_TTL_HOURS` nunca ultrapassa 24 horas, mesmo se uma variável maior for informada.

@@ -159,7 +159,7 @@
       .toLowerCase()
       .split(";", 1)[0]
       .trim() || "application/octet-stream";
-    if (!Number.isSafeInteger(size) || size < 0 || size >= limits.maxFileSize) {
+    if (!Number.isSafeInteger(size) || size < 0 || size > limits.maxFileSize) {
       return { ok: false, reason: "FILE_TOO_LARGE", name, extension, size };
     }
     return { ok: true, name, extension, size, mime, ...definition };
@@ -186,7 +186,7 @@
 
   function fileSelectionErrorMessage(validation, limits = DEFAULT_LIMITS) {
     const messages = {
-      FILE_TOO_LARGE: `“${validation.name || "Este arquivo"}” não pode ser enviado: cada arquivo precisa ter menos de ${formatBytes(limits.maxFileSize)}.`,
+      FILE_TOO_LARGE: `“${validation.name || "Este arquivo"}” não pode ser enviado: cada arquivo pode ter no máximo ${formatBytes(limits.maxFileSize)}.`,
       BATCH_TOO_LARGE: `“${validation.name || "Este arquivo"}” não pode ser adicionado: o lote deve somar no máximo ${formatBytes(limits.maxBatchSize)}.`,
       TOO_MANY_FILES: `Escolha no máximo ${limits.maxFiles} arquivos por envio.`,
     };
@@ -498,7 +498,7 @@
 
   function applyLimits(config) {
     state.limits = normalizeUploadLimits(config);
-    elements.fileFormats.textContent = `Qualquer formato de arquivo — cada arquivo com menos de ${formatBytes(state.limits.maxFileSize)}; lote de até ${formatBytes(state.limits.maxBatchSize)} no total`;
+    elements.fileFormats.textContent = `Qualquer formato de arquivo — cada arquivo de até ${formatBytes(state.limits.maxFileSize)}; lote de até ${formatBytes(state.limits.maxBatchSize)} no total`;
   }
 
   async function connectApi(baseUrl, { persist = true } = {}) {

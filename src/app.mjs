@@ -301,9 +301,10 @@ export function createApp(overrides = {}) {
         callback(null, `${crypto.randomUUID()}${extension ? `.${extension}` : ""}.upload`);
       },
     }),
-    // O Busboy/Multer emite LIMIT_FILE_SIZE ao atingir este valor, portanto um
-    // arquivo com exatamente o teto também é rejeitado e o contrato segue < teto.
-    limits: { fileSize: config.maxFileSize, files: config.maxFiles, fields: 4 },
+    // O Busboy/Multer emite LIMIT_FILE_SIZE ao atingir o valor configurado.
+    // Reservar um byte adicional mantém o teto inclusivo; o primeiro byte acima
+    // de maxFileSize é interrompido pelo parser antes de virar um upload válido.
+    limits: { fileSize: config.maxFileSize + 1, files: config.maxFiles, fields: 4 },
     fileFilter: (_request, file, callback) => {
       file.originalname = decodeMultipartFilename(file.originalname);
       const safeName = sanitizeFilename(file.originalname);
@@ -359,11 +360,11 @@ export function createApp(overrides = {}) {
     const files = request.files || [];
     try {
       if (!files.length) throw apiError(400, "NO_FILES", "Selecione pelo menos um arquivo.");
-      if (files.some((file) => !Number.isSafeInteger(file.size) || file.size < 0 || file.size >= config.maxFileSize)) {
+      if (files.some((file) => !Number.isSafeInteger(file.size) || file.size < 0 || file.size > config.maxFileSize)) {
         throw apiError(
           413,
           "FILE_TOO_LARGE",
-          `Cada arquivo deve ter menos de ${config.maxFileSizeMb} MB.`,
+          `Cada arquivo pode ter no máximo ${config.maxFileSizeMb} MB.`,
         );
       }
       const totalSize = files.reduce((sum, file) => sum + file.size, 0);
@@ -532,7 +533,7 @@ export function createApp(overrides = {}) {
           code: fileTooLarge ? "FILE_TOO_LARGE" : error.code,
           message:
             fileTooLarge
-              ? `Cada arquivo deve ter menos de ${config.maxFileSizeMb} MB.`
+              ? `Cada arquivo pode ter no máximo ${config.maxFileSizeMb} MB.`
               : tooManyFiles
                 ? `Envie no máximo ${config.maxFiles} arquivos por vez.`
                 : "O envio multipart é inválido.",

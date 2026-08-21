@@ -40,7 +40,7 @@ const fileInputTag = html.match(/<input\b[^>]*\bid="fileInput"[^>]*>/)?.[0];
 assert(fileInputTag, "O seletor de arquivos precisa existir.");
 assert(!/\baccept\s*=/i.test(fileInputTag), "O seletor não pode restringir extensões nem tipos MIME.");
 assert(html.includes("Qualquer formato de arquivo"), "A interface precisa comunicar a aceitação universal.");
-assert(html.includes("menos de 200 MB"), "A interface precisa explicar o limite individual estrito.");
+assert(html.includes("cada arquivo de até 200 MB"), "A interface precisa explicar o limite individual inclusivo.");
 assert(html.includes("lote de até 200 MB"), "A interface precisa explicar o limite acumulado.");
 
 assert(html.includes("qrcodejs@1.0.0"), "A versão do gerador de QR Code precisa ficar fixada.");
@@ -64,7 +64,7 @@ assert(javascript.includes("X-File-Sha256"), "O hash informado pela API precisa 
 assert(javascript.includes("X-Delete-Token"), "A exclusão antecipada precisa exigir a chave do remetente.");
 assert(javascript.includes("searchParams.set(\"api\""), "O link deve transportar o endereço público da API.");
 assert(javascript.includes("200 * MB"), "O teto padrão de 200 MiB precisa permanecer explícito.");
-assert(javascript.includes("size >= limits.maxFileSize"), "O arquivo individual de 200 MiB deve ser rejeitado.");
+assert(javascript.includes("size > limits.maxFileSize"), "O arquivo individual de exatamente 200 MiB deve ser aceito.");
 assert(javascript.includes("totalSize > limits.maxBatchSize"), "O lote de exatamente 200 MiB deve ser aceito.");
 assert(javascript.includes("acceptsAnyFileType !== true"), "O frontend deve confirmar a aceitação universal da API.");
 assert(!javascript.includes("TYPE_NOT_ALLOWED"), "O frontend não pode bloquear uma extensão arbitrária.");

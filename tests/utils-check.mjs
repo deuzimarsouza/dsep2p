@@ -77,9 +77,14 @@ assert.equal(utils.DEFAULT_LIMITS.maxFileSize, 200 * MB);
 assert.equal(utils.DEFAULT_LIMITS.maxBatchSize, 200 * MB);
 assert.equal(utils.validateFileMeta({ name: "foto.JPG", size: 200 * MB - 1, type: "image/jpeg" }).ok, true);
 assert.equal(
-  utils.validateFileMeta({ name: "foto.jpg", size: 200 * MB, type: "image/jpeg" }).reason,
+  utils.validateFileMeta({ name: "foto.jpg", size: 200 * MB, type: "image/jpeg" }).ok,
+  true,
+  "Um arquivo individual de exatamente 200 MiB deve ser aceito.",
+);
+assert.equal(
+  utils.validateFileMeta({ name: "foto.jpg", size: 200 * MB + 1, type: "image/jpeg" }).reason,
   "FILE_TOO_LARGE",
-  "Um arquivo individual de exatamente 200 MiB deve ser rejeitado.",
+  "Um arquivo individual acima de 200 MiB deve ser rejeitado.",
 );
 assert.equal(
   utils.validateFileMeta({ name: "foto.jpg", size: 10, type: "text/html" }).ok,
@@ -124,7 +129,7 @@ assert.equal(oversizedBatch.reason, "BATCH_TOO_LARGE", "Um lote acima de 200 MiB
 
 assert.match(
   utils.fileSelectionErrorMessage({ reason: "FILE_TOO_LARGE", name: "grande.bin" }),
-  /menos de 200 MB/,
+  /no máximo 200 MB/,
 );
 assert.match(
   utils.fileSelectionErrorMessage({ reason: "BATCH_TOO_LARGE", name: "parte-b.dat" }),

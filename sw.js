@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "ponte-shell-v6";
+const CACHE_NAME = "ponte-shell-v7";
 const CACHE_PREFIX = "ponte-shell-";
 const APP_SHELL = [
   "./",

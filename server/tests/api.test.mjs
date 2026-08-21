@@ -141,7 +141,7 @@ test("rejeita origem desconhecida e cota excedida", async () => {
     .expect(({ body }) => assert.equal(body.error.code, "DAILY_QUOTA_EXCEEDED"));
 });
 
-test("aplica limite individual estrito e limite agregado inclusivo", async () => {
+test("aplica limites individual e agregado de forma inclusiva", async () => {
   const limitsDirectory = path.join(temporaryDirectory, "limits");
   const limitsApp = createApp({
     storageDir: limitsDirectory,
@@ -157,8 +157,7 @@ test("aplica limite individual estrito e limite agregado inclusivo", async () =>
   await request(limitsApp)
     .post("/api/shares")
     .attach("files", Buffer.alloc(10), { filename: "exatamente.bin" })
-    .expect(413)
-    .expect(({ body }) => assert.equal(body.error.code, "FILE_TOO_LARGE"));
+    .expect(201);
 
   await request(limitsApp)
     .post("/api/shares")
